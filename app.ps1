@@ -1,4 +1,4 @@
-Add-Type -AssemblyName PresentationFramework
+dAdd-Type -AssemblyName PresentationFramework
 [System.Windows.MessageBox]::Show('Badusb success!','Flipper Zero Badusb')
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -7,84 +7,98 @@ Add-Type -AssemblyName System.Drawing
 
 # --- Main Window Setup ---
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "Daniel's Deployment Dashboard"
-$form.Size = New-Object System.Drawing.Size(400, 480)
+$form.Text = "System Dashboard"
+$form.Size = New-Object System.Drawing.Size(400, 300)
 $form.StartPosition = 'CenterScreen'
-$form.BackColor = [System.Drawing.Color]::FromArgb(25, 25, 25)
+$form.BackColor = [System.Drawing.Color]::FromArgb(20, 20, 20)
 $form.ForeColor = [System.Drawing.Color]::White
 $form.FormBorderStyle = 'FixedSingle'
 $form.MaximizeBox = $false
 
+# --- Silent Notification System (No Popups) ---
+$notifyIcon = New-Object System.Windows.Forms.NotifyIcon
+# Extract the default PowerShell icon so the tray icon works reliably
+$notifyIcon.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon((Get-Process -id $pid).Path)
+$notifyIcon.Visible = $true
+
 # --- Title ---
 $titleLabel = New-Object System.Windows.Forms.Label
-$titleLabel.Text = "SYSTEM SETUP"
-$titleLabel.Font = New-Object System.Drawing.Font("Segoe UI", 22, [System.Drawing.FontStyle]::Bold)
+$titleLabel.Text = "SYSTEM STATUS"
+$titleLabel.Font = New-Object System.Drawing.Font("Segoe UI", 20, [System.Drawing.FontStyle]::Bold)
 $titleLabel.Location = New-Object System.Drawing.Point(20, 20)
-$titleLabel.Size = New-Object System.Drawing.Size(350, 50)
+$titleLabel.Size = New-Object System.Drawing.Size(350, 40)
 $titleLabel.ForeColor = [System.Drawing.Color]::FromArgb(0, 255, 150)
 $form.Controls.Add($titleLabel)
 
-# --- App List (Winget IDs) ---
-$apps = @(
-    @{ Name = "qFlipper"; Id = "FlipperDevicesInc.qFlipper" },
-    @{ Name = "Roblox Player"; Id = "Roblox.Roblox" },
-    @{ Name = "Discord"; Id = "Discord.Discord" },
-    @{ Name = "Python 3"; Id = "Python.Python.3" },
-    @{ Name = "Steam"; Id = "Valve.Steam" }
-)
+# --- Battery Display ---
+$batteryLabel = New-Object System.Windows.Forms.Label
+$batteryLabel.Font = New-Object System.Drawing.Font("Segoe UI", 14)
+$batteryLabel.Location = New-Object System.Drawing.Point(25, 80)
+$batteryLabel.Size = New-Object System.Drawing.Size(350, 30)
+$batteryLabel.Text = "Loading Battery Info..."
+$form.Controls.Add($batteryLabel)
 
-$checkBoxes = @()
-$yOffset = 80
-
-# --- Generate Checkboxes Dynamically ---
-foreach ($app in $apps) {
-    $cb = New-Object System.Windows.Forms.CheckBox
-    $cb.Text = $app.Name
-    $cb.Tag = $app.Id
-    $cb.Font = New-Object System.Drawing.Font("Segoe UI", 12)
-    $cb.Location = New-Object System.Drawing.Point(40, $yOffset)
-    $cb.Size = New-Object System.Drawing.Size(300, 30)
-    $cb.Checked = $false
-    $form.Controls.Add($cb)
-    $checkBoxes += $cb
-    $yOffset += 40
+# --- Battery Checking Logic ---
+function Get-BatteryStatus {
+    # Silently continue in case this is run on a desktop with no battery
+    $battery = Get-CimInstance -ClassName Win32_Battery -ErrorAction SilentlyContinue
+    if ($battery) {
+        $statusText = switch ($battery.BatteryStatus) {
+            1 { "Discharging" }
+            2 { "Plugged In" }
+            3 { "Fully Charged" }
+            6 { "Charging" }
+            7 { "Charging (High)" }
+            8 { "Charging (Low)" }
+            9 { "Charging (Critical)" }
+            default { "Unknown" }
+        }
+        return "$($battery.EstimatedChargeRemaining)% [$statusText]"
+    } else {
+        return "No Battery Detected"
+    }
 }
 
-# --- Install Button ---
-$installBtn = New-Object System.Windows.Forms.Button
-$installBtn.Text = "INSTALL SELECTED"
-$installBtn.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
-$installBtn.Location = New-Object System.Drawing.Point(40, $yOffset + 20)
-$installBtn.Size = New-Object System.Drawing.Size(300, 50)
-$installBtn.BackColor = [System.Drawing.Color]::FromArgb(0, 150, 255)
-$installBtn.ForeColor = [System.Drawing.Color]::White
-$installBtn.FlatStyle = 'Flat'
+# --- Live Update Timer (Updates every 5 seconds) ---
+$timer = New-Object System.Windows.Forms.Timer
+$timer.Interval = 5000
+$timer.Add_Tick({
+    $batteryLabel.Text = "Battery: " + (Get-BatteryStatus)
+})
+$timer.Start()
 
-# --- Button Logic ---
-$installBtn.Add_Click({
-    $installBtn.Text = "INSTALLING..."
-    $installBtn.Enabled = $false
-    $form.Refresh()
+# Force a first check immediately
+$batteryLabel.Text = "Battery: " + (Get-BatteryStatus)
 
-    foreach ($cb in $checkBoxes) {
-        if ($cb.Checked) {
-            $id = $cb.Tag
-            # Winget executes silently in the background
-            Start-Process -FilePath "winget" -ArgumentList "install -e --id $id --silent --accept-package-agreements --accept-source-agreements" -Wait -NoNewWindow
-            
-            # Turn the text green when that specific app finishes installing
-            $cb.ForeColor = [System.Drawing.Color]::FromArgb(0, 255, 150)
-            $form.Refresh()
-        }
-    }
+# --- Test Notification Button ---
+$notifBtn = New-Object System.Windows.Forms.Button
+$notifBtn.Text = "SEND TEST NOTIFICATION"
+$notifBtn.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+$notifBtn.Location = New-Object System.Drawing.Point(50, 150)
+$notifBtn.Size = New-Object System.Drawing.Size(280, 50)
+$notifBtn.BackColor = [System.Drawing.Color]::FromArgb(0, 150, 255)
+$notifBtn.ForeColor = [System.Drawing.Color]::White
+$notifBtn.FlatStyle = 'Flat'
 
-    $installBtn.Text = "DONE"
-    $installBtn.BackColor = [System.Drawing.Color]::FromArgb(0, 200, 100)
-    [System.Windows.Forms.MessageBox]::Show("All selected applications have been installed.", "Setup Complete", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
-    $form.Close()
+$notifBtn.Add_Click({
+    $notifyIcon.BalloonTipTitle = "Dashboard Alert"
+    $notifyIcon.BalloonTipText = "This is a native Windows toast notification. No intrusive popups!"
+    $notifyIcon.ShowBalloonTip(3000)
+})
+$form.Controls.Add($notifBtn)
+
+# --- On Load Event ---
+$form.Add_Load({
+    $notifyIcon.BalloonTipTitle = "Dashboard Loaded"
+    $notifyIcon.BalloonTipText = "Your control center is now active in the background."
+    $notifyIcon.ShowBalloonTip(3000)
 })
 
-$form.Controls.Add($installBtn)
+# --- Cleanup on Close ---
+$form.Add_FormClosed({
+    $notifyIcon.Visible = $false
+    $notifyIcon.Dispose()
+})
 
 # --- Render the GUI ---
 $form.ShowDialog() | Out-Null
